@@ -1,0 +1,29 @@
+version: "1.0"
+system: "day10_multi_agent_rag"
+
+shared_input:
+  question: string
+  top_k: integer
+
+agents:
+  supervisor:
+    responsibility: "Choose canonical source filters and flag risky questions."
+    output: [domain_filters, route_reason, risk_high]
+
+  retrieval_agent:
+    responsibility: "Retrieve cleaned Chroma chunks and hybrid-rerank them."
+    output: [evidence]
+
+  quality_guard_agent:
+    responsibility: "Reject stale or forbidden policy evidence."
+    output: [evidence, rejected_evidence, guard_passed]
+
+  synthesis_agent:
+    responsibility: "Produce a grounded extractive answer with citations."
+    output: [answer, citations, confidence, needs_human_review]
+
+constraints:
+  - "Answer only from accepted evidence."
+  - "Abstain when accepted evidence is empty."
+  - "Every non-abstained answer must have at least one citation."
+  - "Risky or low-confidence answers must set needs_human_review=true."

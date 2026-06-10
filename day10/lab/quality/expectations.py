@@ -7,8 +7,11 @@ Sinh viên có thể thay bằng GE / pydantic / custom — miễn là có halt 
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+
+from transform.cleaning_rules import ALLOWED_DOC_IDS, HR_MIN_EFFECTIVE_DATE
 
 
 @dataclass
@@ -109,6 +112,79 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
             ok6,
             "halt",
             f"violations={len(bad_hr_annual)}",
+        )
+    )
+
+    # E7: publish snapshot must not contain duplicate vector identifiers.
+    chunk_ids = [(r.get("chunk_id") or "").strip() for r in cleaned_rows]
+    duplicate_ids = len(chunk_ids) - len(set(chunk_ids))
+    results.append(
+        ExpectationResult(
+            "unique_nonempty_chunk_id",
+            bool(chunk_ids) and all(chunk_ids) and duplicate_ids == 0,
+            "halt",
+            f"empty_ids={sum(not value for value in chunk_ids)}, duplicate_ids={duplicate_ids}",
+        )
+    )
+
+    # E8: cleaned output can only publish registered source documents.
+    unknown_docs = sorted(
+        {
+            (r.get("doc_id") or "").strip()
+            for r in cleaned_rows
+            if (r.get("doc_id") or "").strip() not in ALLOWED_DOC_IDS
+        }
+    )
+    results.append(
+        ExpectationResult(
+            "only_registered_doc_ids",
+            not unknown_docs,
+            "halt",
+            f"unknown_doc_ids={unknown_docs}",
+        )
+    )
+
+    # E9: required source coverage catches accidental allowlist regressions.
+    present_docs = {(r.get("doc_id") or "").strip() for r in cleaned_rows}
+    missing_docs = sorted(ALLOWED_DOC_IDS - present_docs)
+    results.append(
+        ExpectationResult(
+            "required_doc_coverage",
+            not missing_docs,
+            "halt",
+            f"missing_doc_ids={missing_docs}",
+        )
+    )
+
+    # E10: stale HR versions must not survive even if their text is unusual.
+    stale_hr = [
+        r
+        for r in cleaned_rows
+        if r.get("doc_id") == "hr_leave_policy"
+        and (r.get("effective_date") or "") < HR_MIN_EFFECTIVE_DATE
+    ]
+    results.append(
+        ExpectationResult(
+            "hr_effective_date_at_or_after_cutoff",
+            not stale_hr,
+            "halt",
+            f"cutoff={HR_MIN_EFFECTIVE_DATE}, violations={len(stale_hr)}",
+        )
+    )
+
+    # E11: malformed export timestamps are observable but do not block publish.
+    invalid_exported = []
+    for row in cleaned_rows:
+        try:
+            datetime.fromisoformat((row.get("exported_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            invalid_exported.append(row)
+    results.append(
+        ExpectationResult(
+            "exported_at_is_iso_datetime",
+            not invalid_exported,
+            "warn",
+            f"invalid_exported_at={len(invalid_exported)}",
         )
     )
 

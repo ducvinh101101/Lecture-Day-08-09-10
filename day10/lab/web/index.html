@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070f1e">
+  <title>Atlas · Multi-Agent Knowledge Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#chat">Bỏ qua đến khu vực hỏi đáp</a>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3 5 7v10l7 4 7-4V7l-7-4Zm0 0v8m7-4-7 4m-7-4 7 4m0 10V11"/></svg>
+      </div>
+      <div>
+        <p class="eyebrow">Knowledge Operations</p>
+        <h1>Atlas <span>RAG Desk</span></h1>
+      </div>
+    </div>
+    <div class="system-status" id="systemStatus" aria-live="polite">
+      <span class="status-dot"></span>
+      <span>Đang kết nối...</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel source-panel">
+      <div class="panel-heading">
+        <p class="eyebrow">Clean corpus</p>
+        <h2>Kho tri thức</h2>
+      </div>
+      <div class="source-list">
+        <article class="source-card active" data-source="policy_refund_v4">
+          <span class="source-index">01</span><div><strong>Refund Policy</strong><small>policy_refund_v4</small></div>
+        </article>
+        <article class="source-card" data-source="sla_p1_2026">
+          <span class="source-index">02</span><div><strong>P1 Incident SLA</strong><small>sla_p1_2026</small></div>
+        </article>
+        <article class="source-card" data-source="it_helpdesk_faq">
+          <span class="source-index">03</span><div><strong>IT Helpdesk FAQ</strong><small>it_helpdesk_faq</small></div>
+        </article>
+        <article class="source-card" data-source="hr_leave_policy">
+          <span class="source-index">04</span><div><strong>HR Leave Policy</strong><small>hr_leave_policy</small></div>
+        </article>
+        <article class="source-card" data-source="access_control_sop">
+          <span class="source-index">05</span><div><strong>Access Control</strong><small>access_control_sop</small></div>
+        </article>
+      </div>
+      <div class="corpus-meta">
+        <div><span>35</span><small>clean chunks</small></div>
+        <div><span>5</span><small>canonical sources</small></div>
+      </div>
+    </aside>
+
+    <section class="chat-shell" id="chat">
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Grounded by verified documents</p>
+          <h2>Hỏi tài liệu. <span>Nhận bằng chứng.</span></h2>
+          <p>Supervisor định tuyến, Quality Guard kiểm tra và Gemini tổng hợp câu trả lời có trích dẫn.</p>
+        </div>
+        <div class="hero-orbit" aria-hidden="true">
+          <span></span><span></span><span></span>
+          <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18m-3.6-6.4L5.6 18.4m12.8 0L5.6 5.6"/></svg>
+        </div>
+      </div>
+
+      <div class="suggestions" aria-label="Câu hỏi gợi ý">
+        <button data-question="Finance Team xử lý hoàn tiền trong bao lâu?">Thời gian hoàn tiền</button>
+        <button data-question="Ticket P1 tự động escalate sau bao lâu?">Escalation P1</button>
+        <button data-question="Nhân viên dưới 3 năm được bao nhiêu ngày phép năm?">Phép năm HR</button>
+        <button data-question="Level 4 Admin Access yêu cầu ai phê duyệt?">Level 4 Access</button>
+      </div>
+
+      <div class="conversation" id="conversation" aria-live="polite">
+        <article class="message assistant welcome">
+          <div class="avatar">A</div>
+          <div class="message-body">
+            <p class="message-label">Atlas</p>
+            <p>Tôi đã kết nối với collection sạch <strong>day10_kb</strong>. Hãy hỏi về refund, SLA P1, IT Helpdesk, HR hoặc access control.</p>
+          </div>
+        </article>
+      </div>
+
+      <form class="composer" id="askForm">
+        <label for="question">Câu hỏi của bạn</label>
+        <div class="composer-row">
+          <textarea id="question" rows="1" placeholder="Ví dụ: Level 4 Admin Access cần ai phê duyệt?" required></textarea>
+          <button type="submit" id="sendButton" aria-label="Gửi câu hỏi">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Zm7 1 7-8"/></svg>
+            <span>Gửi</span>
+          </button>
+        </div>
+        <div class="composer-meta"><span>Enter để gửi · Shift + Enter xuống dòng</span><span>Không gửi API key tới trình duyệt</span></div>
+      </form>
+    </section>
+
+    <aside class="panel trace-panel">
+      <div class="panel-heading trace-heading">
+        <div><p class="eyebrow">Live orchestration</p><h2>Agent trace</h2></div>
+        <span class="provider-badge" id="providerBadge">Standby</span>
+      </div>
+      <ol class="agent-flow" id="agentFlow">
+        <li data-agent="supervisor"><span>01</span><div><strong>Supervisor</strong><small>Chờ câu hỏi</small></div></li>
+        <li data-agent="retrieval_agent"><span>02</span><div><strong>Retrieval</strong><small>Chờ định tuyến</small></div></li>
+        <li data-agent="quality_guard_agent"><span>03</span><div><strong>Quality Guard</strong><small>Chờ evidence</small></div></li>
+        <li data-agent="synthesis_agent"><span>04</span><div><strong>Synthesis</strong><small>Chờ context</small></div></li>
+      </ol>
+      <div class="trace-detail">
+        <div class="metric"><span>Confidence</span><strong id="confidence">—</strong></div>
+        <div class="confidence-track"><span id="confidenceBar"></span></div>
+        <div class="metric"><span>Latency</span><strong id="latency">—</strong></div>
+        <div class="metric"><span>Guard</span><strong id="guardStatus">—</strong></div>
+      </div>
+      <div class="route-card">
+        <p class="eyebrow">Route reason</p>
+        <p id="routeReason">Supervisor chưa nhận câu hỏi.</p>
+      </div>
+    </aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
+

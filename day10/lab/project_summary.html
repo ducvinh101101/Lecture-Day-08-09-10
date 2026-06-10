@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tổng kết Day 10 · ETL & Multi-Agent RAG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090e17;
+      --bg-gradient: radial-gradient(circle at 12% 8%, rgba(99, 102, 241, 0.12), transparent 30%),
+                     radial-gradient(circle at 88% 28%, rgba(34, 211, 238, 0.1), transparent 32%),
+                     #090e17;
+      --panel: #0f172a;
+      --panel-hover: #1e293b;
+      --panel-border: rgba(255, 255, 255, 0.08);
+      --panel-border-hover: rgba(255, 255, 255, 0.16);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --indigo: #818cf8;
+      --lime: #34d399;
+      --orange: #fbbf24;
+      --red: #f87171;
+      --shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4), 0 1px 1px 0 rgba(255, 255, 255, 0.04) inset;
+      --shadow-hover: 0 20px 40px -15px rgba(99, 102, 241, 0.2), 0 1px 1px 0 rgba(255, 255, 255, 0.08) inset;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    html {
+      scroll-behavior: smooth;
+      color-scheme: dark;
+    }
+    
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg-gradient);
+      font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    a {
+      color: inherit;
+    }
+    
+    code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+      color: var(--cyan);
+      background: rgba(34, 211, 238, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    
+    .wrap {
+      width: min(1180px, calc(100% - 40px));
+      margin: auto;
+    }
+    
+    .top {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--panel-border);
+      background: rgba(9, 14, 23, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    
+    .top .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 72px;
+    }
+    
+    .brand {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.01em;
+    }
+    
+    .brand span {
+      color: var(--cyan);
+      font-style: italic;
+      font-weight: 400;
+    }
+    
+    .nav {
+      display: flex;
+      gap: 8px;
+      overflow: auto;
+    }
+    
+    .nav a {
+      padding: 8px 16px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: var(--transition);
+    }
+    
+    .nav a:hover {
+      color: var(--text);
+      background: rgba(34, 211, 238, 0.1);
+    }
+    
+    header {
+      padding: 88px 0 56px;
+    }
+    
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--indigo);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    
+    h1, h2, h3, p {
+      margin-top: 0;
+    }
+    
+    h1, h2 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    
+    h1 {
+      max-width: 880px;
+      margin-bottom: 24px;
+      font-size: clamp(38px, 6vw, 68px);
+      line-height: 1.1;
+    }
+    
+    h1 span, h2 span {
+      color: var(--cyan);
+      font-style: italic;
+      background: linear-gradient(135deg, var(--cyan) 30%, var(--indigo) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .lead {
+      max-width: 800px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.7;
+    }
+    
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 32px;
+    }
+    
+    .badge {
+      padding: 8px 16px;
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 12px;
+      font-weight: 500;
+      transition: var(--transition);
+    }
+    
+    .badge.ok {
+      color: var(--lime);
+      border-color: rgba(52, 211, 153, 0.25);
+      background: rgba(52, 211, 153, 0.05);
+    }
+    
+    main {
+      display: grid;
+      gap: 80px;
+      padding-bottom: 96px;
+    }
+    
+    section {
+      scroll-margin-top: 100px;
+    }
+    
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      margin-bottom: 32px;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 16px;
+    }
+    
+    .section-head h2 {
+      margin-bottom: 0;
+      font-size: clamp(28px, 4vw, 40px);
+      line-height: 1.1;
+    }
+    
+    .section-head p {
+      max-width: 530px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+    }
+    
+    .stat, .card {
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+    
+    .stat {
+      padding: 24px 20px;
+    }
+    
+    .stat:hover {
+      transform: translateY(-2px);
+      border-color: var(--panel-border-hover);
+      box-shadow: var(--shadow-hover);
+    }
+    
+    .stat strong, .stat span {
+      display: block;
+    }
+    
+    .stat strong {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 38px;
+      color: var(--lime);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    
+    .card {
+      padding: 24px;
+    }
+    
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: var(--panel-border-hover);
+      box-shadow: var(--shadow-hover);
+    }
+    
+    .card h3 {
+      margin-bottom: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    
+    .card p, .card li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    
+    .card ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    
+    .card li {
+      margin-bottom: 6px;
+    }
+    
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    
+    .node {
+      position: relative;
+      min-height: 130px;
+      padding: 20px 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.7);
+      text-align: center;
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+    
+    .node:hover {
+      transform: translateY(-2px);
+      border-color: var(--cyan);
+      box-shadow: 0 10px 25px -5px rgba(34, 211, 238, 0.15);
+    }
+    
+    .node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -12px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 10;
+      color: var(--cyan);
+      font-size: 20px;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+    }
+    
+    .node span {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      color: #090e17;
+      background: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 12px;
+      box-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
+    }
+    
+    .node strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    
+    .node small {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    
+    .node.split {
+      border-color: rgba(251, 191, 36, 0.3);
+    }
+    
+    .node.split:hover {
+      border-color: var(--orange);
+      box-shadow: 0 10px 25px -5px rgba(251, 191, 36, 0.15);
+    }
+    
+    .node.split span {
+      background: var(--orange);
+      box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+    }
+    
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    
+    .compare .card {
+      position: relative;
+      overflow: hidden;
+      padding-left: 28px;
+    }
+    
+    .compare .card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: var(--red);
+    }
+    
+    .compare .after::before {
+      background: var(--lime);
+    }
+    
+    .metric-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--panel-border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    
+    .metric-line:last-child {
+      border-bottom: 0;
+    }
+    
+    .metric-line strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    
+    .timeline {
+      display: grid;
+      gap: 14px;
+    }
+    
+    .change {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 18px;
+      padding: 20px 24px;
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.5);
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+    
+    .change:hover {
+      transform: translateX(4px);
+      border-color: var(--panel-border-hover);
+      background: rgba(15, 23, 42, 0.75);
+    }
+    
+    .change .n {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      color: #090e17;
+      background: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 0 10px rgba(34, 211, 238, 0.3);
+    }
+    
+    .change h3 {
+      margin-bottom: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    
+    .change p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    
+    .agents {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    
+    .agent {
+      padding: 24px 20px;
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.6);
+      box-shadow: var(--shadow);
+      transition: var(--transition);
+    }
+    
+    .agent:hover {
+      transform: translateY(-2px);
+      border-color: var(--indigo);
+      box-shadow: 0 10px 25px -5px rgba(129, 140, 248, 0.15);
+    }
+    
+    .agent .num {
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+    }
+    
+    .agent h3 {
+      margin: 12px 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    
+    .agent p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    
+    .intent {
+      margin-top: 16px;
+      padding: 20px;
+      border: 1px dashed rgba(34, 211, 238, 0.3);
+      border-radius: 16px;
+      background: rgba(34, 211, 238, 0.03);
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    
+    .intent strong {
+      color: var(--cyan);
+      font-weight: 600;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(15, 23, 42, 0.4);
+      font-size: 13px;
+      margin-top: 24px;
+    }
+    
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--panel-border);
+      text-align: left;
+    }
+    
+    th {
+      color: var(--cyan);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(15, 23, 42, 0.8);
+    }
+    
+    td {
+      color: var(--muted);
+    }
+    
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+    }
+    
+    .result {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--lime);
+      font-weight: 600;
+    }
+    
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+    
+    .commands {
+      display: grid;
+      gap: 10px;
+    }
+    
+    .command {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      background: #060a12;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      transition: var(--transition);
+    }
+    
+    .command:hover {
+      border-color: rgba(34, 211, 238, 0.3);
+      background: #090e17;
+    }
+    
+    .command span {
+      color: var(--muted);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 12px;
+    }
+    
+    .note {
+      padding: 20px;
+      border-left: 4px solid var(--orange);
+      border-radius: 4px 16px 16px 4px;
+      background: rgba(251, 191, 36, 0.04);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    
+    footer {
+      padding: 40px 0 56px;
+      border-top: 1px solid var(--panel-border);
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    
+    @media(max-width: 980px) {
+      .stats {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .flow {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .node:not(:last-child)::after {
+        display: none;
+      }
+      .agents {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    
+    @media(max-width: 660px) {
+      .top .wrap {
+        display: block;
+        padding: 12px 0;
+        text-align: center;
+      }
+      .nav {
+        margin-top: 10px;
+        justify-content: center;
+      }
+      .stats, .grid, .compare, .agents {
+        grid-template-columns: 1fr 1fr;
+      }
+      .flow {
+        grid-template-columns: 1fr;
+      }
+      .section-head {
+        display: block;
+      }
+      .section-head p {
+        margin-top: 8px;
+      }
+      .command {
+        display: block;
+        text-align: left;
+      }
+      .command span {
+        display: block;
+        margin-top: 6px;
+      }
+    }
+    
+    @media(max-width: 480px) {
+      .stats, .grid, .compare, .agents {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 36px;
+      }
+    }
+    
+    @media print {
+      .top {
+        display: none;
+      }
+      body {
+        background: white;
+        color: #14202b;
+      }
+      .card, .stat, .node, .agent, .change, table {
+        box-shadow: none;
+        background: white;
+        color: #14202b;
+        border: 1px solid #ccc;
+      }
+      .card p, .card li, .stat span, .node small, .agent p, .change p, td, .lead, .section-head p {
+        color: #4b5b67;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="top"><div class="wrap"><div class="brand">Day 10 <span>System Report</span></div><div class="nav"><a href="#overview">Tổng quan</a><a href="#pipeline">Pipeline</a><a href="#changes">Cải tiến</a><a href="#rag">Multi-Agent RAG</a><a href="#results">Kết quả</a><a href="#run">Cách chạy</a></div></div></nav>
+  <header class="wrap">
+    <p class="eyebrow">ETL · Data Quality · Multi-Agent RAG · Gemini · Web UI</p>
+    <h1>Từ raw data bẩn đến hệ thống hỏi đáp <span>có bằng chứng</span></h1>
+    <p class="lead">Báo cáo này tổng hợp toàn bộ phần đã phân tích, sửa lỗi và cải tiến trong Lab Day 10: ETL pipeline, observability, bộ tài liệu 4 Sprints, Multi-Agent RAG, Gemini synthesis và giao diện web.</p>
+    <div class="badges"><span class="badge ok">ETL grading 10/10</span><span class="badge ok">RAG grading 10/10</span><span class="badge ok">Forbidden hits 0</span><span class="badge">Run: optimized-final</span><span class="badge">Collection: day10_kb</span></div>
+  </header>
+  <main class="wrap">
+    <section id="overview">
+      <div class="section-head"><div><p class="eyebrow">01 · Tổng quan</p><h2>Hệ thống sau <span>cải tiến</span></h2></div><p>Pipeline xử lý dữ liệu có kiểm soát, sau đó cung cấp cleaned snapshot cho hệ thống Multi-Agent RAG và giao diện hỏi đáp.</p></div>
+      <div class="stats"><div class="stat"><strong>247</strong><span>raw records</span></div><div class="stat"><strong>35</strong><span>clean chunks</span></div><div class="stat"><strong>212</strong><span>quarantine records</span></div><div class="stat"><strong>11</strong><span>expectations pass</span></div><div class="stat"><strong>5</strong><span>canonical sources</span></div></div>
+      <div class="grid" style="margin-top:12px"><article class="card"><h3>Đầu vào</h3><p>Raw CSV từ nhiều nguồn chứa duplicate, source lạ, thiếu ngày, refund stale 14 ngày, HR stale 10 ngày và source hợp lệ chưa được đăng ký.</p></article><article class="card"><h3>Đầu ra</h3><p>Collection Chroma <code>day10_kb</code> chỉ chứa dữ liệu sạch từ refund, SLA P1, IT FAQ, HR leave và access control.</p></article></div>
+    </section>
+
+    <section id="pipeline">
+      <div class="section-head"><div><p class="eyebrow">02 · Luồng pipeline</p><h2>End-to-end <span>data flow</span></h2></div><p>Mỗi run dùng cùng run_id để nối log, cleaned CSV, quarantine, manifest và vector snapshot.</p></div>
+      <div class="flow"><div class="node"><span>01</span><strong>Raw CSV</strong><small>247 records · 39 doc_id</small></div><div class="node"><span>02</span><strong>Ingest</strong><small>schema check · counts · run_id</small></div><div class="node split"><span>03</span><strong>Clean</strong><small>version rules · normalize · dedupe</small></div><div class="node split"><span>04</span><strong>Quarantine</strong><small>212 rows + reason</small></div><div class="node"><span>05</span><strong>Validate</strong><small>warn / halt expectations</small></div><div class="node"><span>06</span><strong>Chroma Publish</strong><small>stable ID · upsert · prune</small></div><div class="node"><span>07</span><strong>RAG Serving</strong><small>agents · Gemini · Web UI</small></div></div>
+      <div class="grid" style="margin-top:12px"><article class="card"><h3>Observability</h3><ul><li>Log raw, cleaned và quarantine counts.</li><li>Manifest chứa expectation results và durations.</li><li>Freshness đo theo <code>latest_exported_at</code>.</li></ul></article><article class="card"><h3>Idempotency</h3><ul><li><code>chunk_id</code> ổn định, không phụ thuộc thứ tự dòng.</li><li>Chroma upsert theo ID.</li><li>Prune vector không còn trong cleaned snapshot.</li></ul></article></div>
+    </section>
+
+    <section id="changes">
+      <div class="section-head"><div><p class="eyebrow">03 · Những gì đã sửa</p><h2>Thay đổi và <span>cải tiến</span></h2></div><p>Các thay đổi tập trung vào độ đúng dữ liệu, khả năng quan sát, retrieval quality và trải nghiệm sử dụng.</p></div>
+      <div class="timeline">
+        <article class="change"><div class="n">01</div><div><h3>Đăng ký nguồn access control bị thiếu</h3><p>Thêm <code>access_control_sop</code> vào allowlist và data contract; 6 cleaned chunks được publish thay vì quarantine nhầm.</p></div></article>
+        <article class="change"><div class="n">02</div><div><h3>Loại HR stale theo metadata và nội dung</h3><p>Không chỉ dựa vào effective date; rule semantic loại các dòng “10 ngày phép năm” ngay cả khi metadata ngày trông mới.</p></div></article>
+        <article class="change"><div class="n">03</div><div><h3>Loại refund stale và dữ liệu nhiễu</h3><p>Sửa cửa sổ 14 thành 7 ngày, loại nội dung ambiguous/migration, normalize timestamp và sync artifacts.</p></div></article>
+        <article class="change"><div class="n">04</div><div><h3>Bổ sung expectations và metric impact</h3><p>Kiểm tra source coverage, registered source, unique chunk ID, version cutoff và timestamp ISO; phân biệt rõ warn/halt.</p></div></article>
+        <article class="change"><div class="n">05</div><div><h3>Hoàn thiện 4 Sprints và tài liệu</h3><p>Architecture, data contract, runbook, quality report, group report, individual report và checklist hoàn thành.</p></div></article>
+        <article class="change"><div class="n">06</div><div><h3>Xây Multi-Agent RAG và tích hợp Gemini</h3><p>Supervisor, Retrieval, Quality Guard, Synthesis; citation, confidence, trace, fallback offline và grading 10/10.</p></div></article>
+        <article class="change"><div class="n">07</div><div><h3>Sửa lỗi câu hỏi “bạn có thể giải đáp gì?”</h3><p>Thêm intent <code>capabilities</code>: không retrieval, không gọi Gemini, trả đúng phạm vi 5 nhóm tài liệu.</p></div></article>
+        <article class="change"><div class="n">08</div><div><h3>Thêm giao diện web</h3><p>Chat, citation, confidence, live agent trace, route reason, Gemini status, responsive mobile và API không lộ key.</p></div></article>
+      </div>
+    </section>
+
+    <section id="results">
+      <div class="section-head"><div><p class="eyebrow">04 · Before / After</p><h2>Bằng chứng <span>định lượng</span></h2></div><p>Inject run chứng minh dữ liệu stale có thể tồn tại trong top-k dù đáp án nhìn có vẻ đúng.</p></div>
+      <div class="compare"><article class="card"><p class="eyebrow" style="color:var(--red)">Before · inject-bad</p><h3>Tắt refund correction + skip validation</h3><div class="metric-line"><span>Expected retrieval</span><strong>20/21</strong></div><div class="metric-line"><span>Forbidden hits</span><strong style="color:var(--red)">1</strong></div><div class="metric-line"><span>Expectation failure</span><strong>refund stale · 2 violations</strong></div></article><article class="card after"><p class="eyebrow" style="color:var(--lime)">After · optimized-final</p><h3>Clean, validate và publish lại snapshot</h3><div class="metric-line"><span>Expected retrieval</span><strong>20/21</strong></div><div class="metric-line"><span>Forbidden hits</span><strong style="color:var(--lime)">0</strong></div><div class="metric-line"><span>Official grading</span><strong>10/10 · top-1 10/10</strong></div></article></div>
+      <div class="note" style="margin-top:12px">Câu còn thiếu trong eval mở rộng là <code>q_p1_update_frequency</code>: dữ liệu “update mỗi 30 phút” tồn tại nhưng embedding baseline không xếp vào top-3. Multi-Agent RAG xử lý tốt hơn nhờ Supervisor giới hạn retrieval vào <code>sla_p1_2026</code>.</div>
+    </section>
+
+    <section id="rag">
+      <div class="section-head"><div><p class="eyebrow">05 · Multi-Agent RAG</p><h2>Hỏi đáp có <span>guardrail</span></h2></div><p>Question được phân loại trước retrieval; evidence bị kiểm tra trước khi Gemini tổng hợp câu trả lời.</p></div>
+      <div class="agents"><article class="agent"><span class="num">01</span><h3>Supervisor</h3><p>Nhận diện domain, intent capabilities và câu hỏi rủi ro.</p></article><article class="agent"><span class="num">02</span><h3>Retrieval Agent</h3><p>Chroma dense retrieval kết hợp lexical rerank theo source.</p></article><article class="agent"><span class="num">03</span><h3>Quality Guard</h3><p>Loại evidence stale 14 ngày refund và HR 10 ngày cũ.</p></article><article class="agent"><span class="num">04</span><h3>Synthesis Agent</h3><p>Gemini trả lời grounded có citation; lỗi API thì fallback offline.</p></article></div>
+      <div class="intent"><strong>Intent fix:</strong> câu hỏi meta như “Bạn có thể giải đáp những gì?” được trả lời từ phạm vi hệ thống, không tìm kiếm tài liệu ngẫu nhiên và không gọi Gemini.</div>
+      <table style="margin-top:14px"><thead><tr><th>Hạng mục</th><th>Kết quả</th><th>Ý nghĩa</th></tr></thead><tbody><tr><td>ETL official grading</td><td><span class="result"><span class="dot"></span>10/10</span></td><td>Expected, forbidden và top-1 đều đúng</td></tr><tr><td>Multi-Agent RAG grading</td><td><span class="result"><span class="dot"></span>10/10</span></td><td>Answer và source match đầy đủ</td></tr><tr><td>Unit tests</td><td><span class="result"><span class="dot"></span>4/4</span></td><td>Có test capabilities intent chống tái phát</td></tr><tr><td>Gemini integration</td><td><span class="result"><span class="dot"></span>Active</span></td><td>Key nằm trong .env git-ignore</td></tr></tbody></table>
+    </section>
+
+    <section id="run">
+      <div class="section-head"><div><p class="eyebrow">06 · Cách chạy</p><h2>Lệnh sử dụng <span>chính</span></h2></div><p>Thực hiện từ thư mục <code>day10/lab</code>.</p></div>
+      <div class="commands"><div class="command">python etl_pipeline.py run --run-id optimized-final <span>Clean → validate → Chroma publish</span></div><div class="command">python eval_retrieval.py --out artifacts/eval/test_results.csv <span>Eval mở rộng 21 câu</span></div><div class="command">python grading_run.py --out artifacts/eval/grading_run.jsonl <span>Grading ETL chính thức</span></div><div class="command">python multi_agent_rag.py --trace <span>Chat Multi-Agent trên terminal</span></div><div class="command">python eval_multi_agent_rag.py <span>Grading Multi-Agent RAG</span></div><div class="command">python rag_web.py --port 8000 <span>Giao diện web tại localhost:8000</span></div></div>
+      <div class="grid" style="margin-top:12px"><article class="card"><h3>Artifact quan trọng</h3><ul><li><code>artifacts/manifests/manifest_optimized-final.json</code></li><li><code>artifacts/eval/grading_run.jsonl</code></li><li><code>artifacts/eval/multi_agent_rag_after_intent_fix.jsonl</code></li><li><code>artifacts/rag_traces/</code></li></ul></article><article class="card"><h3>File triển khai chính</h3><ul><li><code>etl_pipeline.py</code> + <code>transform/</code> + <code>quality/</code></li><li><code>multi_agent_rag.py</code> + <code>rag_agents/</code></li><li><code>rag_web.py</code> + <code>web/</code></li><li><code>docs/</code> + <code>reports/</code></li></ul></article></div>
+    </section>
+  </main>
+  <footer><div class="wrap">Day 10 Data Pipeline & Observability · Tổng hợp ngày 2026-06-10 · File HTML độc lập, có thể mở trực tiếp trên trình duyệt.</div></footer>
+</body>
+</html>

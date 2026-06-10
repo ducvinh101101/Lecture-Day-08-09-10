@@ -20,6 +20,8 @@ import argparse
 import json
 import os
 import sys
+import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,7 +49,8 @@ def _log(path: Path, line: str) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%MZ")
+    started_perf = time.perf_counter()
+    run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     raw_path = Path(args.raw)
     if not raw_path.is_file():
         print(f"ERROR: raw file not found: {raw_path}", file=sys.stderr)
@@ -63,13 +66,22 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     rows = load_raw_csv(raw_path)
     raw_count = len(rows)
+    required_raw_columns = {"chunk_id", "doc_id", "chunk_text", "effective_date", "exported_at"}
+    raw_columns = set(rows[0]) if rows else set()
+    missing_raw_columns = sorted(required_raw_columns - raw_columns)
     log(f"run_id={run_id}")
     log(f"raw_records={raw_count}")
+    log(f"raw_missing_required_columns={missing_raw_columns}")
+    if missing_raw_columns:
+        log("PIPELINE_HALT: raw schema is missing required columns.")
+        return 2
 
+    clean_started = time.perf_counter()
     cleaned, quarantine = clean_rows(
         rows,
         apply_refund_window_fix=not args.no_refund_fix,
     )
+    clean_duration = round(time.perf_counter() - clean_started, 4)
     cleaned_path = CLEAN_DIR / f"cleaned_{run_id.replace(':', '-')}.csv"
     quar_path = QUAR_DIR / f"quarantine_{run_id.replace(':', '-')}.csv"
     write_cleaned_csv(cleaned_path, cleaned)
@@ -77,13 +89,21 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     log(f"cleaned_records={len(cleaned)}")
     log(f"quarantine_records={len(quarantine)}")
+    quarantine_reasons = dict(sorted(Counter(r.get("reason", "unspecified") for r in quarantine).items()))
+    cleaned_by_doc = dict(sorted(Counter(r.get("doc_id", "") for r in cleaned).items()))
+    log(f"quarantine_by_reason={json.dumps(quarantine_reasons, ensure_ascii=False, sort_keys=True)}")
+    log(f"cleaned_by_doc_id={json.dumps(cleaned_by_doc, ensure_ascii=False, sort_keys=True)}")
+    log(f"clean_duration_seconds={clean_duration}")
     log(f"cleaned_csv={cleaned_path.relative_to(ROOT)}")
     log(f"quarantine_csv={quar_path.relative_to(ROOT)}")
 
+    validate_started = time.perf_counter()
     results, halt = run_expectations(cleaned)
+    validate_duration = round(time.perf_counter() - validate_started, 4)
     for r in results:
         sym = "OK" if r.passed else "FAIL"
         log(f"expectation[{r.name}] {sym} ({r.severity}) :: {r.detail}")
+    log(f"validate_duration_seconds={validate_duration}")
     if halt and not args.skip_validate:
         log("PIPELINE_HALT: expectation suite failed (halt).")
         return 2
@@ -91,11 +111,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         log("WARN: expectation failed but --skip-validate → tiếp tục embed (chỉ dùng cho demo Sprint 3).")
 
     # Embed
+    embed_started = time.perf_counter()
     embed_ok = cmd_embed_internal(
         cleaned_path,
         run_id=run_id,
         log=log,
     )
+    embed_duration = round(time.perf_counter() - embed_started, 4)
+    log(f"embed_duration_seconds={embed_duration}")
     if not embed_ok:
         return 3
 
@@ -110,12 +133,25 @@ def cmd_run(args: argparse.Namespace) -> int:
         "raw_records": raw_count,
         "cleaned_records": len(cleaned),
         "quarantine_records": len(quarantine),
+        "cleaned_by_doc_id": cleaned_by_doc,
+        "quarantine_by_reason": quarantine_reasons,
+        "expectations": [
+            {"name": r.name, "passed": r.passed, "severity": r.severity, "detail": r.detail}
+            for r in results
+        ],
+        "halt_expectation_failures": [r.name for r in results if not r.passed and r.severity == "halt"],
         "latest_exported_at": latest_exported,
         "no_refund_fix": bool(args.no_refund_fix),
         "skipped_validate": bool(args.skip_validate and halt),
         "cleaned_csv": str(cleaned_path.relative_to(ROOT)),
         "chroma_path": os.environ.get("CHROMA_DB_PATH", "./chroma_db"),
         "chroma_collection": os.environ.get("CHROMA_COLLECTION", "day10_kb"),
+        "durations_seconds": {
+            "clean": clean_duration,
+            "validate": validate_duration,
+            "embed": embed_duration,
+            "total": round(time.perf_counter() - started_perf, 4),
+        },
     }
     man_path = MAN_DIR / f"manifest_{run_id.replace(':', '-')}.json"
     man_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -143,15 +179,14 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
     from transform.cleaning_rules import load_raw_csv as load_csv  # same loader
 
     rows = load_csv(cleaned_csv)
-    if not rows:
-        log("WARN: cleaned CSV rỗng — không embed.")
-        return True
-
     client = chromadb.PersistentClient(path=db_path)
     emb = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=model_name)
     col = client.get_or_create_collection(name=collection_name, embedding_function=emb)
 
     ids = [r["chunk_id"] for r in rows]
+    if len(ids) != len(set(ids)):
+        log(f"ERROR: duplicate chunk_id before embed: total={len(ids)} unique={len(set(ids))}")
+        return False
     # Tránh “mồi cũ” trong top-k: xóa id không còn trong cleaned run này (index = snapshot publish).
     try:
         prev = col.get(include=[])
@@ -162,11 +197,15 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
             log(f"embed_prune_removed={len(drop)}")
     except Exception as e:
         log(f"WARN: embed prune skip: {e}")
+    if not rows:
+        log(f"embed_upsert count=0 collection={collection_name}")
+        return True
     documents = [r["chunk_text"] for r in rows]
     metadatas = [
         {
             "doc_id": r.get("doc_id", ""),
             "effective_date": r.get("effective_date", ""),
+            "exported_at": r.get("exported_at", ""),
             "run_id": run_id,
         }
         for r in rows
